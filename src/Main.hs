@@ -1,13 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
--- import System.Directory
 
-import Brick.AttrMap
-import Brick.Main
-import Brick.Types
-import Brick.Widgets.Core
+import Brick
 import Network.HTTP.Simple
 import Data.Aeson
+import qualified Cursor.List.NonEmpty as NE
+import Cursor.Simple.List.NonEmpty (NonEmptyCursor)
+import qualified Cursor.Simple.List.NonEmpty as SNE
+import Graphics.Vty.Input.Events
+import Graphics.Vty.Attributes
+import Data.Maybe
 
 main :: IO ()
 main = do
@@ -15,14 +17,16 @@ main = do
     endState <- defaultMain tuiApp initialState
     print endState
 
-getTopicList :: IO TopicList
-getTopicList = do
-    request <-parseRequest "https://discourse.haskell.org/top.json" 
+getCursor :: IO (NonEmptyCursor Topic)
+getCursor = do
+    request <- parseRequest "https://discourse.haskell.org/latest.json" 
     resp <- httpJSON request
-    return (getResponseBody resp :: TopicList)
+    return . topicListToCursor . getResponseBody $ resp
 
-data TuiState =
-    TuiState TopicList
+newtype TuiState =
+    TuiState {
+              cursor :: NonEmptyCursor Topic
+             }
     deriving (Show)
 
 type ResourceName = String
@@ -34,23 +38,41 @@ tuiApp =
         , appChooseCursor = showFirstCursor
         , appHandleEvent = handleTuiEvent
         , appStartEvent = pure
-        , appAttrMap = const $ attrMap mempty []
+        , appAttrMap = const $ attrMap mempty [("selected", fg red)]
         }
 
 buildInitialState :: IO TuiState
-buildInitialState = TuiState <$> getTopicList
+buildInitialState = TuiState <$> getCursor
 
 drawTui :: TuiState -> [Widget ResourceName]
-drawTui (TuiState (TopicList topics)) = (:[]) . viewport "posts" Vertical . vBox . map (str . title) $ topics
+drawTui (TuiState (NE.NonEmptyCursor prev curr next)) = (:[]) . viewport "posts" Vertical . vBox $
+        (map drawPost . reverse $ prev)
+    ++  (withAttr "selected" .  drawPost $ curr) :
+        (map drawPost next)
+
+drawPost topic = likes <+> title'
+    where
+        likes :: Widget ResourceName
+        likes = padRight (Pad 1) . hLimit 4 . padRight Max $ (str . show . likeCount $ topic)
+
+        title' :: Widget ResourceName
+        title' = str . title $ topic
+
+
 
 handleTuiEvent :: TuiState -> BrickEvent n e -> EventM n (Next TuiState)
+handleTuiEvent (TuiState {cursor = cursor}) (VtyEvent (EvKey KUp   []))
+        = continue . TuiState . fromMaybe cursor . SNE.nonEmptyCursorSelectPrev $ cursor
+handleTuiEvent (TuiState {cursor = cursor}) (VtyEvent (EvKey KDown []))
+        = continue . TuiState . fromMaybe cursor . SNE.nonEmptyCursorSelectNext $ cursor
 handleTuiEvent s e = halt s
 
 instance FromJSON Topic where
     parseJSON = withObject "Topic" $ \v -> do 
-        id <- v .: "id"
-        title <- v .: "title"
-        return $ Topic id title
+        postId' <- v .: "id"
+        title'  <- v .: "title"
+        likeCount' <- v.: "like_count"
+        return $ Topic postId' title' likeCount'
 
 
 instance FromJSON TopicList where
@@ -59,10 +81,14 @@ instance FromJSON TopicList where
             topics <- topicListWrapper .: "topics"
             return $ TopicList topics
 
+topicListToCursor :: TopicList -> NonEmptyCursor Topic
+topicListToCursor (TopicList (x:xs)) = NE.NonEmptyCursor [] x xs
+
 -- here to help with decoding from JSON
 newtype TopicList = TopicList [Topic] deriving (Show)
 
 data Topic = Topic {
                  postId :: Int,
-                 title :: String
+                 title :: String,
+                 likeCount :: Int
                  } deriving (Show)
