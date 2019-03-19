@@ -22,11 +22,14 @@ main = do
 
 getTuiState :: IO TuiState
 getTuiState = do
-    request <- parseRequest "https://discourse.haskell.org/latest.json" 
-    resp <- getResponseBody <$> httpJSON request
+    topicsRequest <- parseRequest "https://discourse.haskell.org/latest.json"
+    categoriesRequest <- parseRequest "https://discourse.haskell.org/categories.json"
+    topicsResp <- getResponseBody <$> httpJSON topicsRequest
+    categoriesResp <- getResponseBody <$> httpJSON categoriesRequest
     return TuiState {
-                    cursor = topicListToCursor . topicList $ resp,
-                    userMap = M.fromList . map (\x -> (userId x, x)) . users $ resp
+                    cursor = topicListToCursor . topicList $ topicsResp,
+                    userMap = M.fromList . map (\x -> (userId x, x)) . users $ topicsResp,
+                    categoryMap = M.fromList . map (\x -> (categoryId x, x)) . categories $ categoriesResp
                     }
 
 type ResourceName = String
@@ -38,12 +41,12 @@ tuiApp =
         , appChooseCursor = showFirstCursor
         , appHandleEvent = handleTuiEvent
         , appStartEvent = pure
-        , appAttrMap = const $ attrMap mempty [("title", withStyle currentAttr bold), ("pinned", fg green), ("OP", fg blue), ("selected", fg red)]
+        , appAttrMap = const $ attrMap mempty [("title", withStyle currentAttr bold), ("pinned", fg green), ("selected", fg red), ("OP", fg blue), ("rest", defAttr)]
         }
 
 
 drawTui :: TuiState -> [Widget ResourceName]
-drawTui (TuiState (NE.NonEmptyCursor prev curr next) userMap) = (:[]) . viewport "posts" Vertical . vBox $
+drawTui (TuiState (NE.NonEmptyCursor prev curr next) userMap _) = (:[]) . viewport "posts" Vertical . vBox $
         (map drawPost . reverse $ prev)
      ++ (withAttr "selected" .  drawPost $ curr)
       : (map drawPost next)
@@ -71,12 +74,19 @@ drawTui (TuiState (NE.NonEmptyCursor prev curr next) userMap) = (:[]) . viewport
                             $ topic
 
                 poster :: Widget ResourceName
-                poster = withAttr "OP" 
-                       . padLeft (Pad 5)
-                       . str
-                       . userName
-                       $ userMap M.! (posterId . head . posters $ topic)
+                poster = padLeft (Pad 5)
+                       . hBox
+                       . mapFst (withAttr "OP") (withAttr "rest")
+                       . showList
+                       . map (\x ->  userName $ userMap M.! posterId x)
+                       . posters
+                       $ topic
 
+                showList :: [String] -> [Widget ResourceName]
+                showList s = map str $ (map (++ " ") . init $ s) ++ [last s]
+
+                mapFst :: (a -> a) -> (a -> a) ->  [a] -> [a]
+                mapFst fn fn' (x:xs) = (fn x) : (map fn' xs)
 
 handleTuiEvent :: TuiState -> BrickEvent n e -> EventM n (Next TuiState)
 handleTuiEvent s (VtyEvent (EvKey key [])) = scroll s key 

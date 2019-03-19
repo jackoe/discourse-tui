@@ -13,7 +13,8 @@ instance FromJSON Topic where
         postsCount' <- v.: "posts_count"
         posters' <- v.: "posters"
         pinned' <- v.: "pinned"
-        return $ Topic postId' title' likeCount' postsCount' posters' pinned'
+        categoryId' <- v.: "category_id"
+        return $ Topic postId' categoryId' title' likeCount' postsCount' posters' pinned'
 
 instance FromJSON User where
     parseJSON (Object v) = User
@@ -34,6 +35,21 @@ instance FromJSON Poster where
            <$> v .: "user_id"
            <*> v .: "description"
 
+instance FromJSON Category where
+    parseJSON (Object v) = Category
+        <$> v .: "id"
+        <*> v .: "name"
+
+instance FromJSON CategoryResponse where
+    parseJSON = withObject "CategoryResponse" $ \v -> do
+        categoryList <- v .: "categoryList"
+        categories' <- categoryList .: "categories"
+        return $ CategoryResponse categories'
+
+newtype CategoryResponse = CategoryResponse {
+                                         categories :: [Category]
+                                         } deriving (Show)
+
 data TopicResponse = TopicResponse
     {
     users :: [User],
@@ -42,6 +58,7 @@ data TopicResponse = TopicResponse
 
 data Topic = Topic {
                    postId :: Int,
+                   categoryID :: Int,
                    title :: String,
                    likeCount :: Int,
                    postsCount :: Int,
@@ -55,6 +72,11 @@ data User = User {
                  realName :: String
                  } deriving (Show)
 
+data Category = Category {
+                         categoryId :: Int,
+                         categoryName :: String
+                         } deriving (Show)
+
 data Poster = Poster {
                      posterId :: Int,
                      description :: String
@@ -63,6 +85,6 @@ data Poster = Poster {
 data TuiState =
     TuiState {
               cursor :: NonEmptyCursor Topic,
-              userMap :: M.IntMap User
-             }
-    deriving (Show)
+              userMap :: M.IntMap User,
+              categoryMap :: M.IntMap Category
+             } deriving (Show)
