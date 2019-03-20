@@ -67,7 +67,8 @@ executable discourse-tui
                        aeson,
                        http-conduit,
                        vty,
-                       containers
+                       containers,
+                       vector
 
   -- Directories containing source files.
   hs-source-dirs:      src
