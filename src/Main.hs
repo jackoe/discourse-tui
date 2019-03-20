@@ -15,6 +15,10 @@ import Brick.Widgets.Border
 import qualified Data.IntMap.Strict as M
 import Brick.Widgets.List
 import qualified Data.Vector as V
+import qualified Data.Text as T
+import Text.Pandoc
+import Text.Pandoc.Writers.CommonMark
+import Text.Pandoc.Readers.HTML
 import Types
 
 main :: IO ()
@@ -27,12 +31,12 @@ getTuiState :: IO TuiState
 getTuiState = do
     topicsRequest <- parseRequest "https://discourse.haskell.org/latest.json"
     categoriesRequest <- parseRequest "https://discourse.haskell.org/categories.json"
-    topicsResp <- getResponseBody <$> httpJSON topicsRequest
+    (TopicResponse users topicList) <- getResponseBody <$> httpJSON topicsRequest
     categoriesResp <- getResponseBody <$> httpJSON categoriesRequest
     return TuiState {
                     posts = Nothing,
-                    topics = Just $ list "contents" (V.fromList . topicList $ topicsResp) topicHeight,
-                    userMap = M.fromList . map (\x -> (userId x, x)) . users $ topicsResp,
+                    topics = Just $ list "contents" (V.fromList topicList) topicHeight,
+                    userMap = M.fromList . map (\x -> (userId x, x)) $ users,
                     categoryMap = M.fromList . map (\x -> (categoryId x, x)) . categories $ categoriesResp,
                     baseURL = "https://discourse.haskell.org/"
                     }
@@ -42,10 +46,13 @@ getPosts :: TuiState -> IO (List String Post)
 getPosts (TuiState {baseURL = baseURL, topics = (Just topics)}) = do
     let (Just selectedTopicID) = topicId . snd <$> listSelectedElement topics 
     postsRequest <- parseRequest $ baseURL ++ "t/" ++ (show selectedTopicID) ++ ".json"
-    (PostResponse l) <- getResponseBody <$> httpJSON postsRequest
-    return $ list "posts" (V.fromList l) 5
+    (PostResponse posts') <- getResponseBody <$> httpJSON postsRequest
+    posts <- mapM postToPandoc posts'
+    return $ list "posts" (V.fromList posts) 5
 
-
+postToPandoc posts = do
+    newContents <- toMarkdown . contents $ posts
+    return posts {contents = newContents} 
 
 
 type ResourceName = String
@@ -60,6 +67,13 @@ tuiApp =
         , appAttrMap = const $ attrMap mempty [("title", withStyle currentAttr bold), ("pinned", fg green), ("selected", fg red), ("OP", fg blue), ("rest", defAttr)]
         }
 
+toMarkdown :: String -> IO String
+toMarkdown s = do
+    result <- runIO $ do
+        doc <- readHtml def (T.pack s)
+        writeCommonMark def doc
+    rst <- handleError result
+    return $ T.unpack rst
 
 drawTui :: TuiState -> [Widget ResourceName]
 drawTui (TuiState (Just scrollable) Nothing userMap categoryMap _) = (:[]) . renderList drawTopic True $ scrollable
