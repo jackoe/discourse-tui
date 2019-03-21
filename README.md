@@ -6,7 +6,7 @@ Usage: discourse-tui baseUrl
 Example: discourse-tui discourse.haskell.org
 
 to compile:
-(make sure you have nix installed)[https://nixos.org/nix/download.html]
+[make sure you have nix installed](https://nixos.org/nix/download.html)
 ```
 nix-build release.nix
 ```
