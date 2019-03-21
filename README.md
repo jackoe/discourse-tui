@@ -1,4 +1,4 @@
-This is a terminal viewer for [discourse](https://www.discourse.org/) inspired by a (similar tool for reddit)[https://github.com/michael-lazar/rtv].
+This is a terminal viewer for [discourse](https://www.discourse.org/) inspired by a [similar tool for reddit](https://github.com/michael-lazar/rtv).
 
 ![demo](demo.svg)
 
