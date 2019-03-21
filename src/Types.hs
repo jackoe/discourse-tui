@@ -57,6 +57,7 @@ instance FromJSON Post where
         <$> v .: "id"
         <*> v .: "username"
         <*> v .: "cooked"
+        <*> v .: "score"
 
 newtype CategoryResponse = CategoryResponse {
                                          categories :: [Category]
@@ -110,15 +111,17 @@ data Post = Post
     {
     postId :: Int,
     opUserName :: String,
-    contents :: String
+    contents :: String,
+    score :: Double
     } deriving (Show)
 
 
 data TuiState = TuiState
     {
     topics :: Maybe (List String Topic),
-    posts :: Maybe (List String Post),
+    posts :: Maybe (List String Post), -- Nothing if not in post view
     userMap :: M.IntMap User,
     categoryMap :: M.IntMap Category,
-    baseURL :: String
+    baseURL :: String,
+    singlePostView :: Bool -- if we're looking at the full contents of one post
     } deriving (Show)
