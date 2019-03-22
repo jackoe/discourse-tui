@@ -10,3 +10,5 @@ to compile:
 ```
 nix-build release.nix
 ```
+
+As of 22/3/2018, `cabal new-install` also works.
