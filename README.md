@@ -3,7 +3,7 @@ This is a terminal viewer for [discourse](https://www.discourse.org/) inspired b
 ![demo](demo.svg)
 
 Usage: discourse-tui baseUrl
-Example: discourse-tui discourse.haskell.org
+Example: discourse-tui http://discourse.haskell.org
 
 to compile:
 [make sure you have nix installed](https://nixos.org/nix/download.html)

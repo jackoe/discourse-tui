@@ -23,7 +23,7 @@ import System.Environment
 import Types
 import System.Exit
 
-helpMessage = "Usage: discourse-tui url \n Ex: discourse-tui discourse.haskell.org"
+helpMessage = "Usage: discourse-tui url \n Ex: discourse-tui http://discourse.haskell.org"
 
 parseArgs :: IO String
 parseArgs = do
@@ -64,7 +64,7 @@ helpBar = withAttr "bar" . str $ "arrow keys -> move | left right -> read replie
 getPosts :: TuiState -> IO (List String Post)
 getPosts (TuiState {baseURL = baseURL, topics = (Just topics)}) = do
     let (Just selectedTopicID) = topicId . snd <$> listSelectedElement topics 
-    postsRequest <- parseRequest $ baseURL ++ "t/" ++ (show selectedTopicID) ++ ".json"
+    postsRequest <- parseRequest $ baseURL ++ "/t/" ++ (show selectedTopicID) ++ ".json"
     (PostResponse posts') <- getResponseBody <$> httpJSON postsRequest
     posts <- mapM postToPandoc posts'
     return $ list "posts" (V.fromList posts) 10
