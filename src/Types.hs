@@ -4,6 +4,7 @@ import Data.Aeson
 import Cursor.Simple.List.NonEmpty (NonEmptyCursor)
 import qualified Data.IntMap.Strict as M
 import Brick.Widgets.List
+import Debug.Trace
 
 instance FromJSON Topic where
     parseJSON = withObject "Topic" $ \v -> do 
@@ -53,15 +54,29 @@ instance FromJSON PostResponse where
         return $ PostResponse posts'
 
 instance FromJSON Post where
-    parseJSON (Object v) = Post
-        <$> v .: "id"
-        <*> v .: "username"
-        <*> v .: "cooked"
-        <*> v .: "score"
+    parseJSON = withObject "Post" $ \v -> do
+        id' <- traceShow v (v .: "id")
+        username' <- v .: "username"
+        cooked' <- v .: "cooked"
+        actions <- v .: "actions_summary"
+        return $ Post id' username' cooked' (if null actions then 0 else count . head $ actions)
 
-newtype CategoryResponse = CategoryResponse {
-                                         categories :: [Category]
-                                         } deriving (Show)
+instance FromJSON Action where
+    parseJSON (Object v) = Action
+        <$> v .: "id"
+        <*> v .: "count"
+
+newtype CategoryResponse = CategoryResponse
+    {
+    categories :: [Category]
+    } deriving (Show)
+
+
+data Action = Action
+    {
+    actionId :: Int,
+    count :: Int
+    } deriving (Show)
 
 data TopicResponse = TopicResponse
     {
@@ -112,13 +127,13 @@ data Post = Post
     postId :: Int,
     opUserName :: String,
     contents :: String,
-    score :: Double
+    likes :: Int
     } deriving (Show)
 
 
 data TuiState = TuiState
     {
-    topics :: Maybe (List String Topic),
+    topics :: List String Topic,
     posts :: Maybe (List String Post), -- Nothing if not in post view
     userMap :: M.IntMap User,
     categoryMap :: M.IntMap Category,

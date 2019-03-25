@@ -32,7 +32,6 @@ parseArgs = do
         then die helpMessage
         else return $ head args
 
-
 main :: IO ()
 main = do
     baseUrl <- parseArgs
@@ -49,7 +48,7 @@ getTuiState baseUrl = do
     categoriesResp <- getResponseBody <$> httpJSON categoriesRequest
     return TuiState {
                     posts = Nothing,
-                    topics = Just $ list "contents" (V.fromList topicList) topicHeight,
+                    topics = list "contents" (V.fromList topicList) topicHeight,
                     userMap = M.fromList . map (\x -> (userId x, x)) $ users,
                     categoryMap = M.fromList . map (\x -> (categoryId x, x)) . categories $ categoriesResp,
                     baseURL = baseUrl,
@@ -62,7 +61,7 @@ helpBar = withAttr "bar" . str $ "arrow keys -> move | left right -> read replie
 
 -- get the posts for the current topic
 getPosts :: TuiState -> IO (List String Post)
-getPosts (TuiState {baseURL = baseURL, topics = (Just topics)}) = do
+getPosts (TuiState {baseURL = baseURL, topics = topics}) = do
     let (Just selectedTopicID) = topicId . snd <$> listSelectedElement topics 
     postsRequest <- parseRequest $ baseURL ++ "/t/" ++ (show selectedTopicID) ++ ".json"
     (PostResponse posts') <- getResponseBody <$> httpJSON postsRequest
@@ -98,7 +97,7 @@ toMarkdown s = do
 -- draws the entire TuiState
 -- this pattern matches the topic list
 drawTui :: TuiState -> [Widget ResourceName]
-drawTui (TuiState (Just scrollable) Nothing userMap categoryMap _ _) = (:[]) $ (renderList drawTopic True $ scrollable) <=> helpBar
+drawTui (TuiState scrollable Nothing userMap categoryMap _ _) = (:[]) $ (renderList drawTopic True $ scrollable) <=> helpBar
     where
         drawTopic selected (Topic _ categoryId title likeCount postsCount posters pinned)= 
                           (if selected then  withAttr "selected" . border else border)
@@ -138,17 +137,29 @@ drawTui (TuiState (Just scrollable) Nothing userMap categoryMap _ _) = (:[]) $ (
                 showList :: [String] -> [Widget ResourceName]
                 showList s = map str $ (map (++ " ") . init $ s) ++ [last s]
 -- this pattern matches the post list
-drawTui (TuiState _ (Just posts) _ _ _ False) = (:[]) $ (renderList drawPost True $ posts) <=> helpBar
+drawTui (TuiState _ (Just posts) _ _ _ False)
+    = (:[])
+    $ (renderList drawPost True $ posts)
+    <=> helpBar
     where
-        drawPost selected (Post id username contents score) =  border . vLimit 8 . padBottom (Max) . padRight (Max) . 
-            (if selected
-            then (withAttr "selected")
-            else withAttr "")
-            $ (hLimit 8 . padRight Max $ str . show $ score) <+> (withAttr "OP" . str $ username) <=> (strWrap contents)
+        drawPost selected (Post id username' contents score')
+            = border'
+            . withAttr (if selected then "selected" else "")
+            $ (hLimit 4 . padRight Max . str . show $ score')
+            <+> (userName''
+            <=> contents')
+            where
+                userName'' = withAttr "OP" . str $ username'
+                contents' = strWrap contents
+                border' = border
+                        . vLimit 8
+                        . padBottom Max
+                        . padRight  Max
+
 drawTui (TuiState {posts = (Just posts), singlePostView = True}) = (:[]) $ case listSelectedElement posts of
-                                                 (Just (_, post)) -> (withAttr "OP" . str . opUserName $ post)
-                                                  <=> padBottom Max (str . contents $ post) <=> helpBar
-                                                 Nothing -> str "something went wrong"
+    (Just (_, post)) -> (withAttr "OP" . str . opUserName $ post)
+     <=> padBottom Max (str . contents $ post) <=> helpBar
+    Nothing -> str "something went wrong"
 
 mapFst :: (a -> a) -> (a -> a) ->  [a] -> [a]
 mapFst fn fn' (x:xs) = (fn x) : (map fn' xs)
@@ -163,7 +174,7 @@ handleTuiEvent tui (VtyEvent (EvKey KRight  _)) = do
     continue $ tui {posts = Just posts'}
 
 handleTuiEvent tui (VtyEvent (EvKey KLeft   _)) = continue $ tui {posts = Nothing}
-handleTuiEvent (TuiState (Just list) Nothing usrMap catMap url spv) ev = scrollHandler (\x -> TuiState (Just x) Nothing usrMap catMap url spv) list ev
+handleTuiEvent (TuiState list Nothing usrMap catMap url spv) ev = scrollHandler (\x -> TuiState x Nothing usrMap catMap url spv) list ev
 handleTuiEvent (TuiState topics (Just list) usrMap catMap url spv) ev = scrollHandler (\x -> TuiState topics (Just x) usrMap catMap url spv) list ev
 
 scrollHandler restoreTuiState list (VtyEvent ev) = continue . restoreTuiState =<< handler
