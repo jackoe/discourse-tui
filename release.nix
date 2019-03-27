@@ -1,7 +1,7 @@
 let
   nixpkgs = fetchGit {
     url = git://github.com/NixOS/nixpkgs-channels;
-    ref = "nixos-18.09";
+    ref = "nixos-19.03";
   };
 
   config = {
