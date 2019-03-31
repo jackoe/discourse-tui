@@ -5,6 +5,9 @@ import Cursor.Simple.List.NonEmpty (NonEmptyCursor)
 import qualified Data.IntMap.Strict as M
 import Brick.Widgets.List
 import Debug.Trace
+import GHC.Generics
+import Control.Lens
+import Control.Lens.TH
 
 instance FromJSON Topic where
     parseJSON = withObject "Topic" $ \v -> do 
@@ -29,7 +32,6 @@ instance FromJSON TopicResponse where
            topicList' <- v .: "topic_list"
            topics' <- topicList' .: "topics"
            return $ TopicResponse users' topics'
-
 
 instance FromJSON Poster where
     parseJSON (Object v) = Poster
@@ -59,7 +61,7 @@ instance FromJSON Post where
         username' <- v .: "username"
         cooked' <- v .: "cooked"
         actions <- v .: "actions_summary"
-        return $ Post id' username' cooked' (if null actions then 0 else count . head $ actions)
+        return $ Post id' username' cooked' (if null actions then 0 else _count . head $ actions)
 
 instance FromJSON Action where
     parseJSON (Object v) = Action
@@ -68,20 +70,19 @@ instance FromJSON Action where
 
 newtype CategoryResponse = CategoryResponse
     {
-    categories :: [Category]
+    _categories :: [Category]
     } deriving (Show)
-
 
 data Action = Action
     {
-    actionId :: Int,
-    count :: Int
+    _actionId :: Int,
+    _count :: Int
     } deriving (Show)
 
 data TopicResponse = TopicResponse
     {
-    users :: [User],
-    topicList :: [Topic]
+    _users :: [User],
+    _topicList :: [Topic]
     } deriving (Show)
 
 topicHeight :: Int
@@ -89,54 +90,69 @@ topicHeight = 4
 
 data Topic = Topic
     {
-    topicId :: Int,
-    categoryID :: Int,
-    title :: String,
-    likeCount :: Int,
-    postsCount :: Int,
-    posters :: [Poster],
-    pinned :: Bool
+    _topicId :: Int,
+    _categoryID :: Int,
+    _title :: String,
+    _likeCount :: Int,
+    _postsCount :: Int,
+    _posters :: [Poster],
+    _pinned :: Bool
     } deriving (Show)
+
 
 data User = User
     {
-    userId :: Int,
-    userName :: String,
-    realName :: String
+    _userId :: Int,
+    _userName :: String,
+    _realName :: String
     } deriving (Show)
+
 
 data Category = Category
     {
-    categoryId :: Int,
-    categoryName :: String
+    _categoryId :: Int,
+    _categoryName :: String
     } deriving (Show)
 
 data Poster = Poster
     {
-    posterId :: Int,
-    description :: String
+    _posterId :: Int,
+    _description :: String
     } deriving (Show)
 
 data PostResponse = PostResponse
     {
-    postList :: [Post]                         
-    } 
+    _postList :: [Post]                         
+    } deriving (Show)
+
 
 data Post = Post
     {
-    postId :: Int,
-    opUserName :: String,
-    contents :: String,
-    likes :: Int
+    _postId :: Int,
+    _opUserName :: String,
+    _contents :: String,
+    _likes :: Int
     } deriving (Show)
-
 
 data TuiState = TuiState
     {
-    topics :: List String Topic,
-    posts :: Maybe (List String Post), -- Nothing if not in post view
-    userMap :: M.IntMap User,
-    categoryMap :: M.IntMap Category,
-    baseURL :: String,
-    singlePostView :: Bool -- if we're looking at the full contents of one post
+    _topics :: List String Topic,
+    _posts :: Maybe (List String Post), -- Nothing if not in post view
+    _userMap :: M.IntMap User,
+    _categoryMap :: M.IntMap Category,
+    _baseURL :: String,
+    _singlePostView :: Bool -- if we're looking at the full contents of one post
     } deriving (Show)
+
+type ResourceName = String
+
+makeLenses ''CategoryResponse
+makeLenses ''Post
+makeLenses ''PostResponse
+makeLenses ''Category
+makeLenses ''Poster
+makeLenses ''Topic
+makeLenses ''TopicResponse
+makeLenses ''Action
+makeLenses ''User
+makeLenses ''TuiState

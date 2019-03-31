@@ -22,6 +22,8 @@ import Text.Pandoc.Readers.HTML
 import System.Environment
 import Types
 import System.Exit
+import Control.Lens
+
 
 helpMessage = "Usage: discourse-tui url \n Ex: discourse-tui http://discourse.haskell.org"
 
@@ -47,12 +49,12 @@ getTuiState baseUrl = do
     (TopicResponse users topicList) <- getResponseBody <$> httpJSON topicsRequest
     categoriesResp <- getResponseBody <$> httpJSON categoriesRequest
     return TuiState {
-                    posts = Nothing,
-                    topics = list "contents" (V.fromList topicList) topicHeight,
-                    userMap = M.fromList . map (\x -> (userId x, x)) $ users,
-                    categoryMap = M.fromList . map (\x -> (categoryId x, x)) . categories $ categoriesResp,
-                    baseURL = baseUrl,
-                    singlePostView = False
+                    _posts = Nothing,
+                    _topics = list "contents" (V.fromList topicList) topicHeight,
+                    _userMap = M.fromList . map (\x -> (x^.userId, x)) $ users,
+                    _categoryMap = M.fromList . map (\x -> (x^.categoryId, x)) $ categoriesResp^.categories,
+                    _baseURL = baseUrl,
+                    _singlePostView = False
                     }
 
 -- the help bar at the bottom
@@ -61,20 +63,19 @@ helpBar = withAttr "bar" . str $ "arrow keys -> move | left right -> read replie
 
 -- get the posts for the current topic
 getPosts :: TuiState -> IO (List String Post)
-getPosts (TuiState {baseURL = baseURL, topics = topics}) = do
-    let (Just selectedTopicID) = topicId . snd <$> listSelectedElement topics 
-    postsRequest <- parseRequest $ baseURL ++ "/t/" ++ (show selectedTopicID) ++ ".json"
+getPosts ts = do
+    let (Just selectedTopicID) = view (_2 . topicId) <$> listSelectedElement (ts ^. topics)
+    postsRequest <- parseRequest $ mconcat [ts^.baseURL, "/t/", show selectedTopicID, ".json"]
     (PostResponse posts') <- getResponseBody <$> httpJSON postsRequest
     posts <- mapM postToPandoc posts'
     return $ list "posts" (V.fromList posts) 10
 
+postToPandoc :: Post -> IO Post
+postToPandoc post = do
+    newContents <- toMarkdown $ post ^. contents
+    return $ post & contents .~ newContents
 
-postToPandoc posts = do
-    newContents <- toMarkdown . contents $ posts
-    return posts {contents = newContents} 
 
-
-type ResourceName = String
 
 tuiApp :: App TuiState e ResourceName
 tuiApp =
@@ -128,11 +129,11 @@ drawTui (TuiState scrollable Nothing userMap categoryMap _ _) = (:[]) $ (renderL
                        . hBox
                        . mapFst (withAttr "OP") (withAttr "rest")
                        . showList
-                       . map (\x ->  userName $ userMap M.! posterId x)
+                       . map (\x -> view userName $ userMap M.! (x ^. posterId))
                        $ posters
 
                 category :: Widget ResourceName
-                category = padLeft (Pad 5) . str . categoryName $ categoryMap M.! categoryId
+                category = padLeft (Pad 5) . str . view categoryName $ categoryMap M.! categoryId
 
                 showList :: [String] -> [Widget ResourceName]
                 showList s = map str $ (map (++ " ") . init $ s) ++ [last s]
@@ -156,9 +157,9 @@ drawTui (TuiState _ (Just posts) _ _ _ False)
                         . padBottom Max
                         . padRight  Max
 
-drawTui (TuiState {posts = (Just posts), singlePostView = True}) = (:[]) $ case listSelectedElement posts of
-    (Just (_, post)) -> (withAttr "OP" . str . opUserName $ post)
-     <=> padBottom Max (str . contents $ post) <=> helpBar
+drawTui (TuiState _ (Just posts) _ _ _ True) = (:[]) $ case listSelectedElement posts of
+    (Just (_, post)) -> (withAttr "OP" . str $ post ^. opUserName)
+     <=> padBottom Max (str $ post ^. contents) <=> helpBar
     Nothing -> str "something went wrong"
 
 mapFst :: (a -> a) -> (a -> a) ->  [a] -> [a]
@@ -171,9 +172,9 @@ handleTuiEvent (TuiState topics (Just list) usrMap catMap url singlePostView) (V
 handleTuiEvent (TuiState topics (Just list) usrMap catMap url True) (VtyEvent (EvKey _ _)) = continue $ TuiState topics (Just list) usrMap catMap url False
 handleTuiEvent tui (VtyEvent (EvKey KRight  _)) = do
     posts' <- liftIO $ getPosts tui
-    continue $ tui {posts = Just posts'}
+    continue $ tui & posts .~ (Just posts')
 
-handleTuiEvent tui (VtyEvent (EvKey KLeft   _)) = continue $ tui {posts = Nothing}
+handleTuiEvent tui (VtyEvent (EvKey KLeft   _)) = continue $ tui & posts .~ Nothing
 handleTuiEvent (TuiState list Nothing usrMap catMap url spv) ev = scrollHandler (\x -> TuiState x Nothing usrMap catMap url spv) list ev
 handleTuiEvent (TuiState topics (Just list) usrMap catMap url spv) ev = scrollHandler (\x -> TuiState topics (Just x) usrMap catMap url spv) list ev
 

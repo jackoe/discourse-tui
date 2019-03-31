@@ -57,7 +57,11 @@ executable discourse-tui
   other-modules:       Types
 
   -- LANGUAGE extensions used by modules in this package.
-  extensions: ScopedTypeVariables, OverloadedStrings
+  default-extensions: ScopedTypeVariables,
+                      OverloadedStrings,
+                      DuplicateRecordFields,
+                      DeriveGeneric,
+                      TemplateHaskell
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
@@ -70,7 +74,8 @@ executable discourse-tui
                        containers,
                        vector,
                        pandoc,
-                       text
+                       text,
+                       lens
 
   -- Directories containing source files.
   hs-source-dirs:      src
