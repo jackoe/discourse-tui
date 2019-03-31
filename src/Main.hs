@@ -39,7 +39,7 @@ main = do
     baseUrl <- parseArgs
     initialState <- getTuiState baseUrl
     endState <- defaultMain tuiApp initialState
-    putStrLn "close"
+    return ()
 
 -- initialize the TuiState with the list of topics and catagories
 getTuiState :: String -> IO TuiState
@@ -49,12 +49,12 @@ getTuiState baseUrl = do
     (TopicResponse users topicList) <- getResponseBody <$> httpJSON topicsRequest
     categoriesResp <- getResponseBody <$> httpJSON categoriesRequest
     return TuiState {
-                    _posts = Nothing,
-                    _topics = list "contents" (V.fromList topicList) topicHeight,
-                    _userMap = M.fromList . map (\x -> (x^.userId, x)) $ users,
-                    _categoryMap = M.fromList . map (\x -> (x^.categoryId, x)) $ categoriesResp^.categories,
-                    _baseURL = baseUrl,
-                    _singlePostView = False
+        _posts = Nothing,
+        _topics = list "contents" (V.fromList topicList) topicHeight,
+        _userMap = M.fromList . map (\x -> (x^.userId, x)) $ users,
+        _categoryMap = M.fromList . map (\x -> (x^.categoryId, x)) $ categoriesResp^.categories,
+        _baseURL = baseUrl,
+        _singlePostView = False
                     }
 
 -- the help bar at the bottom
@@ -84,7 +84,7 @@ tuiApp =
         , appChooseCursor = showFirstCursor
         , appHandleEvent = handleTuiEvent
         , appStartEvent = pure
-        , appAttrMap = const $ attrMap mempty [("title", withStyle currentAttr bold), ("pinned", fg green), ("selected", fg red), ("OP", fg blue), ("rest", defAttr), ("bar", fg yellow)]
+        , appAttrMap = const $ attrMap mempty [("title", withStyle defAttr bold), ("pinned", fg green), ("selected", bg yellow), ("OP", fg blue), ("rest", defAttr), ("bar", fg yellow)]
         }
 
 toMarkdown :: String -> IO String
@@ -100,14 +100,15 @@ toMarkdown s = do
 drawTui :: TuiState -> [Widget ResourceName]
 drawTui (TuiState scrollable Nothing userMap categoryMap _ _) = (:[]) $ (renderList drawTopic True $ scrollable) <=> helpBar
     where
-        drawTopic selected (Topic _ categoryId title likeCount postsCount posters pinned)= 
-                          (if selected then  withAttr "selected" . border else border)
+        drawTopic selected (Topic _ categoryId title likeCount postsCount posters pinned)
+                        = border
                         . (if pinned   then  withAttr "pinned"   else id)
                         . padRight Max
                         $ (likes <+> title') <=> hBox [category, postsCount', posters']
             where
                 likes :: Widget ResourceName
-                likes = padRight (Pad 1)
+                likes = (if selected then  withAttr "selected" else id)
+                      . padRight (Pad 1)
                       . hLimit 4
                       . padRight Max
                       . str
@@ -137,6 +138,7 @@ drawTui (TuiState scrollable Nothing userMap categoryMap _ _) = (:[]) $ (renderL
 
                 showList :: [String] -> [Widget ResourceName]
                 showList s = map str $ (map (++ " ") . init $ s) ++ [last s]
+
 -- this pattern matches the post list
 drawTui (TuiState _ (Just posts) _ _ _ False)
     = (:[])
@@ -145,8 +147,8 @@ drawTui (TuiState _ (Just posts) _ _ _ False)
     where
         drawPost selected (Post id username' contents score')
             = border'
-            . withAttr (if selected then "selected" else "")
-            $ (hLimit 4 . padRight Max . str . show $ score')
+            $ withAttr (if selected then "selected" else "")
+              (hLimit 4 . padRight Max . str . show $ score') 
             <+> (userName''
             <=> contents')
             where
