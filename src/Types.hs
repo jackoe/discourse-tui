@@ -4,7 +4,6 @@ import Data.Aeson
 import Cursor.Simple.List.NonEmpty (NonEmptyCursor)
 import qualified Data.IntMap.Strict as M
 import Brick.Widgets.List
-import Debug.Trace
 import GHC.Generics
 import Control.Lens
 import Control.Lens.TH
@@ -57,7 +56,7 @@ instance FromJSON PostResponse where
 
 instance FromJSON Post where
     parseJSON = withObject "Post" $ \v -> do
-        id' <- traceShow v (v .: "id")
+        id' <- v .: "id"
         username' <- v .: "username"
         cooked' <- v .: "cooked"
         actions <- v .: "actions_summary"
