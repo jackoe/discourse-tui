@@ -8,8 +8,8 @@ import GHC.Generics
 import Control.Lens
 import Control.Lens.TH
 
-instance FromJSON Topic where
-    parseJSON = withObject "Topic" $ \v -> do 
+instance FromJSON ProtoTopic where
+    parseJSON = withObject "ProtoTopic" $ \v -> do 
         topicId' <- v .: "id"
         title'  <- v .: "title"
         likeCount' <- v.: "like_count"
@@ -17,7 +17,7 @@ instance FromJSON Topic where
         posters' <- v.: "posters"
         pinned' <- v.: "pinned"
         categoryId' <- v.: "category_id"
-        return $ Topic topicId' categoryId' title' likeCount' postsCount' posters' pinned'
+        return $ ProtoTopic topicId' categoryId' title' likeCount' postsCount' posters' pinned'
 
 instance FromJSON User where
     parseJSON (Object v) = User
@@ -81,13 +81,13 @@ data Action = Action
 data TopicResponse = TopicResponse
     {
     _users :: [User],
-    _topicList :: [Topic]
+    _topicList :: [ProtoTopic]
     } deriving (Show)
 
 topicHeight :: Int
 topicHeight = 4
 
-data Topic = Topic
+data ProtoTopic = ProtoTopic
     {
     _topicId :: Int,
     _categoryID :: Int,
@@ -98,6 +98,16 @@ data Topic = Topic
     _pinned :: Bool
     } deriving (Show)
 
+data Topic = Topic
+    {
+    _topicId :: Int,
+    _category :: String,
+    _title :: String,
+    _likeCount :: Int,
+    _postsCount :: Int,
+    _posters :: [String],
+    _pinned :: Bool
+    } deriving (Show)
 
 data User = User
     {
@@ -124,7 +134,6 @@ data PostResponse = PostResponse
     _postList :: [Post]                         
     } deriving (Show)
 
-
 data Post = Post
     {
     _postId :: Int,
@@ -137,8 +146,6 @@ data TuiState = TuiState
     {
     _topics :: List String Topic,
     _posts :: Maybe (List String Post), -- Nothing if not in post view
-    _userMap :: M.IntMap User,
-    _categoryMap :: M.IntMap Category,
     _baseURL :: String,
     _singlePostView :: Bool -- if we're looking at the full contents of one post
     } deriving (Show)

@@ -24,6 +24,18 @@ import Types
 import System.Exit
 import Control.Lens
 
+-- change a protoTopic into a topic by consulting userMap and catagoryMap
+parseTopic :: M.IntMap User -> M.IntMap Category -> ProtoTopic -> Topic
+parseTopic userMap catagoryMap (ProtoTopic topicId catId title likeC postsC posters pinned)
+    = Topic {
+        _title = title,
+        _topicId = topicId,
+        _category = ((catagoryMap M.! catId) ^. categoryName),
+        _likeCount = likeC,
+        _postsCount = postsC,
+        _posters = (map (\x -> (userMap M.! (x ^. posterId)) ^. userName) posters),
+        _pinned = pinned
+            }
 
 helpMessage = "Usage: discourse-tui url \n Ex: discourse-tui http://discourse.haskell.org"
 
@@ -46,13 +58,13 @@ getTuiState :: String -> IO TuiState
 getTuiState baseUrl = do
     topicsRequest <- parseRequest (baseUrl ++ "/latest.json")
     categoriesRequest <- parseRequest (baseUrl ++ "/categories.json")
-    (TopicResponse users topicList) <- getResponseBody <$> httpJSON topicsRequest
     categoriesResp <- getResponseBody <$> httpJSON categoriesRequest
+    (TopicResponse users topicList) <- getResponseBody <$> httpJSON topicsRequest
+    let userMap     = M.fromList . map (\x -> (x ^. userId, x)) $ users
+    let categoryMap = M.fromList . map (\x -> (x ^. categoryId, x)) $ categoriesResp ^. categories
     return TuiState {
         _posts = Nothing,
-        _topics = list "contents" (V.fromList topicList) topicHeight,
-        _userMap = M.fromList . map (\x -> (x^.userId, x)) $ users,
-        _categoryMap = M.fromList . map (\x -> (x^.categoryId, x)) $ categoriesResp^.categories,
+        _topics = list "contents" (V.fromList $ map (parseTopic userMap categoryMap) topicList) topicHeight,
         _baseURL = baseUrl,
         _singlePostView = False
                     }
@@ -98,9 +110,9 @@ toMarkdown s = do
 -- draws the entire TuiState
 -- this pattern matches the topic list
 drawTui :: TuiState -> [Widget ResourceName]
-drawTui (TuiState scrollable Nothing userMap categoryMap _ _) = (:[]) $ (renderList drawTopic True $ scrollable) <=> helpBar
+drawTui (TuiState scrollable Nothing _ _) = (:[]) $ (renderList drawTopic True $ scrollable) <=> helpBar
     where
-        drawTopic selected (Topic _ categoryId title likeCount postsCount posters pinned)
+        drawTopic selected (Topic _ category' title likeCount postsCount posters pinned)
                         = border
                         . (if pinned   then  withAttr "pinned"   else id)
                         . padRight Max
@@ -130,17 +142,16 @@ drawTui (TuiState scrollable Nothing userMap categoryMap _ _) = (:[]) $ (renderL
                        . hBox
                        . mapFst (withAttr "OP") (withAttr "rest")
                        . showList
-                       . map (\x -> view userName $ userMap M.! (x ^. posterId))
                        $ posters
 
                 category :: Widget ResourceName
-                category = padLeft (Pad 5) . str . view categoryName $ categoryMap M.! categoryId
+                category = padLeft (Pad 5) . str $ category'
 
                 showList :: [String] -> [Widget ResourceName]
                 showList s = map str $ (map (++ " ") . init $ s) ++ [last s]
 
 -- this pattern matches the post list
-drawTui (TuiState _ (Just posts) _ _ _ False)
+drawTui (TuiState _ (Just posts) _ False)
     = (:[])
     $ (renderList drawPost True $ posts)
     <=> helpBar
@@ -159,7 +170,7 @@ drawTui (TuiState _ (Just posts) _ _ _ False)
                         . padBottom Max
                         . padRight  Max
 
-drawTui (TuiState _ (Just posts) _ _ _ True) = (:[]) $ case listSelectedElement posts of
+drawTui (TuiState _ (Just posts) _ True) = (:[]) $ case listSelectedElement posts of
     (Just (_, post)) -> (withAttr "OP" . str $ post ^. opUserName)
      <=> padBottom Max (str $ post ^. contents) <=> helpBar
     Nothing -> str "something went wrong"
@@ -167,18 +178,27 @@ drawTui (TuiState _ (Just posts) _ _ _ True) = (:[]) $ case listSelectedElement 
 mapFst :: (a -> a) -> (a -> a) ->  [a] -> [a]
 mapFst fn fn' (x:xs) = (fn x) : (map fn' xs)
 
--- handles key presses. TODO: clean
 handleTuiEvent :: TuiState -> BrickEvent String e -> EventM String (Next TuiState)
 handleTuiEvent tui (VtyEvent (EvKey (KChar 'q') _)) = halt tui
-handleTuiEvent (TuiState topics (Just list) usrMap catMap url singlePostView) (VtyEvent (EvKey KRight _)) = continue $ TuiState topics (Just list) usrMap catMap url (not singlePostView)
-handleTuiEvent (TuiState topics (Just list) usrMap catMap url True) (VtyEvent (EvKey _ _)) = continue $ TuiState topics (Just list) usrMap catMap url False
+
+handleTuiEvent (TuiState topics (Just list) url singlePostView) (VtyEvent (EvKey KRight _))
+    = continue $ TuiState topics (Just list) url (not singlePostView)
+
+handleTuiEvent (TuiState topics (Just list) url True) (VtyEvent (EvKey _ _))
+      = continue $ TuiState topics (Just list) url False
+
 handleTuiEvent tui (VtyEvent (EvKey KRight  _)) = do
     posts' <- liftIO $ getPosts tui
     continue $ tui & posts .~ (Just posts')
 
-handleTuiEvent tui (VtyEvent (EvKey KLeft   _)) = continue $ tui & posts .~ Nothing
-handleTuiEvent (TuiState list Nothing usrMap catMap url spv) ev = scrollHandler (\x -> TuiState x Nothing usrMap catMap url spv) list ev
-handleTuiEvent (TuiState topics (Just list) usrMap catMap url spv) ev = scrollHandler (\x -> TuiState topics (Just x) usrMap catMap url spv) list ev
+handleTuiEvent tui (VtyEvent (EvKey KLeft   _))
+    = continue $ tui & posts .~ Nothing
+
+handleTuiEvent (TuiState list Nothing url spv) ev
+    = scrollHandler (\x -> TuiState x Nothing url spv) list ev
+
+handleTuiEvent (TuiState topics (Just list) url spv) ev
+    = scrollHandler (\x -> TuiState topics (Just x) url spv) list ev
 
 scrollHandler restoreTuiState list (VtyEvent ev) = continue . restoreTuiState =<< handler
     where
